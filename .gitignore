@@ -1,38 +1,36 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
 
-# Virtual env
+# Virtual environments
 .venv/
 venv/
 env/
 
 # Training outputs
-runs/*
-!runs/.gitkeep
+runs/
 runs_four_models/
 
-# Dataset (keep expected VOC2012 directory skeleton only)
-VOCdevkit/VOC2012/Annotations/*
-VOCdevkit/VOC2012/ImageSets/*
-VOCdevkit/VOC2012/JPEGImages/*
-VOCdevkit/VOC2012/SegmentationClass/*
-VOCdevkit/VOC2012/SegmentationObject/*
-!VOCdevkit/VOC2012/Annotations/.gitkeep
-!VOCdevkit/VOC2012/ImageSets/.gitkeep
-!VOCdevkit/VOC2012/JPEGImages/.gitkeep
-!VOCdevkit/VOC2012/SegmentationClass/.gitkeep
-!VOCdevkit/VOC2012/SegmentationObject/.gitkeep
+# Dataset
+VOCdevkit/
 
-# Checkpoints
+# Model weights / checkpoints / exports
 *.pt
 *.pth
+*.ckpt
+*.onnx
+*.engine
+*.safetensors
 
 # Logs and generated reports
 *.log
 *.csv
+*.json
+
+# Cache
+.cache/
+*.tmp
 
 # VSCode
 .vscode/
