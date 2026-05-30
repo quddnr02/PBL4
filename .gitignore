@@ -10,17 +10,27 @@ venv/
 env/
 
 # Training outputs
-runs/
+runs/*
+!runs/.gitkeep
 runs_four_models/
 
-# Dataset
-VOCdevkit/
+# Dataset (keep expected VOC2012 directory skeleton only)
+VOCdevkit/VOC2012/Annotations/*
+VOCdevkit/VOC2012/ImageSets/*
+VOCdevkit/VOC2012/JPEGImages/*
+VOCdevkit/VOC2012/SegmentationClass/*
+VOCdevkit/VOC2012/SegmentationObject/*
+!VOCdevkit/VOC2012/Annotations/.gitkeep
+!VOCdevkit/VOC2012/ImageSets/.gitkeep
+!VOCdevkit/VOC2012/JPEGImages/.gitkeep
+!VOCdevkit/VOC2012/SegmentationClass/.gitkeep
+!VOCdevkit/VOC2012/SegmentationObject/.gitkeep
 
 # Checkpoints
 *.pt
 *.pth
 
-# Logs
+# Logs and generated reports
 *.log
 *.csv
 

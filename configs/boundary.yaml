@@ -1,0 +1,22 @@
+experiment_name: 01_SegFormer-B1_Boundary
+use_boundary_head: true
+use_context_head: false
+use_class_weight: true
+class_weight_method: median_frequency
+boundary_loss_weight: 0.2
+
+epochs: 50
+batch_size: 4
+lr: 0.00006
+weight_decay: 0.01
+image_size: 512
+num_workers: 4
+decoder_channels: 256
+pretrained_model_name: nvidia/mit-b1
+seed: 42
+deterministic: true
+
+voc_root: ./VOCdevkit/VOC2012
+train_txt: ./pbl_train.txt
+val_txt: ./pbl_val.txt
+output_dir: ./runs

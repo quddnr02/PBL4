@@ -1,0 +1,9 @@
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.36.0
+timm>=0.9.12
+PyYAML>=6.0
+numpy>=1.23.0
+Pillow>=9.0.0
+tqdm>=4.64.0
+thop>=0.1.1.post2209072238
