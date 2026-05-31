@@ -55,8 +55,8 @@ class MultiHeadSegmentationLoss(nn.Module):
         self,
         class_weights: torch.Tensor | None = None,
         ignore_index: int = VOC_IGNORE_INDEX,
-        boundary_weight: float = 0.2,
-        context_weight: float = 0.4,
+        boundary_weight: float = 0.3,
+        context_weight: float = 0.3,
     ):
         super().__init__()
         self.ignore_index = ignore_index

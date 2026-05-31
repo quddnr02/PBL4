@@ -43,8 +43,12 @@ HISTORY_FIELDS = [
 
 
 def make_loaders(cfg: dict) -> tuple[VOCSegmentationDataset, VOCSegmentationDataset, DataLoader, DataLoader]:
-    train_dataset = VOCSegmentationDataset(cfg["voc_root"], cfg["train_txt"], cfg["image_size"], train=True)
-    val_dataset = VOCSegmentationDataset(cfg["voc_root"], cfg["val_txt"], cfg["image_size"], train=False)
+    train_dataset = VOCSegmentationDataset(
+        cfg["voc_root"], cfg["train_txt"], cfg["image_size"], train=True, augmentation=cfg.get("augmentation")
+    )
+    val_dataset = VOCSegmentationDataset(
+        cfg["voc_root"], cfg["val_txt"], cfg["image_size"], train=False, augmentation=cfg.get("augmentation")
+    )
     common = {
         "batch_size": int(cfg["batch_size"]),
         "num_workers": int(cfg.get("num_workers", 4)),
@@ -64,8 +68,8 @@ def build_loss(cfg: dict, train_dataset: VOCSegmentationDataset, device: torch.d
     return MultiHeadSegmentationLoss(
         class_weights=class_weights,
         ignore_index=VOC_IGNORE_INDEX,
-        boundary_weight=float(cfg.get("boundary_loss_weight", 0.2)),
-        context_weight=float(cfg.get("context_loss_weight", 0.4)),
+        boundary_weight=float(cfg.get("boundary_loss_weight", 0.3)),
+        context_weight=float(cfg.get("context_loss_weight", 0.3)),
     )
 
 
@@ -148,8 +152,7 @@ def run_experiment(config_path: str) -> None:
         num_classes=VOC_NUM_CLASSES,
         use_boundary_head=bool(cfg.get("use_boundary_head", False)),
         use_context_head=bool(cfg.get("use_context_head", False)),
-        decoder_channels=int(cfg.get("decoder_channels", 256)),
-        pretrained_model_name=cfg.get("pretrained_model_name", "nvidia/mit-b1"),
+        pretrained_model_name=cfg.get("pretrained_model_name", "nvidia/segformer-b1-finetuned-ade-512-512"),
     ).to(device)
     params_m = count_parameters_m(model)
     gflops = compute_gflops(model, int(cfg["image_size"]), device)
@@ -184,7 +187,7 @@ def run_experiment(config_path: str) -> None:
         }
         history.append(row)
         write_rows(output_dir / "history.csv", history, HISTORY_FIELDS)
-        val_metrics.save_confusion_matrix(str(output_dir / "confusion_matrix_full.csv"))
+        val_metrics.save_confusion_outputs(output_dir)
         print(
             f"epoch={epoch}/{epochs} train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
             f"PA={metric_values['PA']:.4f} mIoU={metric_values['mIoU']:.4f}"
@@ -201,10 +204,12 @@ def run_experiment(config_path: str) -> None:
         write_rows(output_dir / "best_results.csv", [best_row], HISTORY_FIELDS)
         write_rows(output_dir / "summary.csv", [best_row], HISTORY_FIELDS)
         if best_cm is not None:
-            import numpy as np
-
-            np.savetxt(output_dir / "confusion_matrix_full.csv", best_cm, fmt="%d", delimiter=",")
+            best_metrics = SegmentationMetrics(VOC_NUM_CLASSES, VOC_IGNORE_INDEX)
+            best_metrics.confusion_matrix = best_cm
+            best_metrics.save_confusion_outputs(output_dir)
     write_rows(output_dir / "last_results.csv", [last_row], HISTORY_FIELDS)
+    save_checkpoint(output_dir / "last.pt", model, optimizer, epochs, last_row, cfg)
+    print(f"Saved last checkpoint: {output_dir / 'last.pt'} ({checkpoint_size_mb(output_dir / 'last.pt'):.3f} MB)")
     print(f"Finished {experiment_name}. Best mIoU={best_miou:.4f}")
 
 
