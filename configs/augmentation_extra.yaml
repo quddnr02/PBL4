@@ -1,0 +1,31 @@
+dataset_expansion:
+  enabled: true
+  original_repeat: 1
+  augmented_repeat: 1
+
+extra_augmentation:
+  color_jitter:
+    enabled: true
+    prob: 0.5
+    brightness: 0.2
+    contrast: 0.2
+    saturation: 0.2
+    hue: 0.05
+
+  gaussian_blur:
+    enabled: true
+    prob: 0.2
+    kernel_size: 5
+    sigma_min: 0.1
+    sigma_max: 2.0
+
+  grayscale:
+    enabled: true
+    prob: 0.1
+
+  rotation:
+    enabled: true
+    prob: 0.3
+    degrees: 10
+    image_fill: [0, 0, 0]
+    mask_fill: 255
