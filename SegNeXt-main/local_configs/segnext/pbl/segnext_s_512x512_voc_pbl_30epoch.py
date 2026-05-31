@@ -4,17 +4,13 @@
 
 import os
 
-config_dir = os.path.dirname(__file__)
-segnext_root = os.path.abspath(os.path.join(config_dir, '..', '..', '..'))
-pbl_root = os.path.abspath(os.path.join(segnext_root, '..'))
-
 experiment_name = 'SegNeXt_S_CE_Official'
-work_dir = os.path.join(pbl_root, 'runs', experiment_name)
+work_dir = '../runs/SegNeXt_S_CE_Official'
 
-data_root = os.path.join(pbl_root, 'VOCdevkit', 'VOC2012')
-train_split = os.path.join(pbl_root, 'pbl_train.txt')
-val_split = os.path.join(pbl_root, 'pbl_val.txt')
-pretrained_checkpoint = os.path.join(segnext_root, 'pretrained', 'mscan_s.pth')
+data_root = '../VOCdevkit/VOC2012'
+train_split = '../pbl_train.txt'
+val_split = '../pbl_val.txt'
+pretrained_checkpoint = 'pretrained/mscan_s.pth'
 
 num_classes = 21
 ignore_index = 255
@@ -52,7 +48,6 @@ if val_count is None:
     print(f'[PBL config warning] val split not found yet: {val_split}')
 
 print('\n[PBL SegNeXt official experiment]')
-print(f'  config path              = {__file__}')
 print(f'  work_dir                 = {work_dir}')
 print('  model                    = official SegNeXt-S (MSCAN-S + LightHamHead)')
 print(f'  pretrained checkpoint    = {pretrained_checkpoint}')
