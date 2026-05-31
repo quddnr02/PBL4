@@ -49,19 +49,13 @@ def make_loaders(
         cfg["voc_root"], cfg["train_txt"], cfg["image_size"], train=True, aug_config=aug_config
     )
     val_dataset = VOCSegmentationDataset(cfg["voc_root"], cfg["val_txt"], cfg["image_size"], train=False)
-    print(f"Train dataset length: {len(train_dataset)} (original: {train_dataset.base_length})")
+    enabled_extra = train_dataset.extra_augmentation_enabled_items()
+    print(f"Base train samples: {train_dataset.base_length}")
+    print(f"Original repeat: {train_dataset.original_repeat}")
+    print(f"Augmented repeat: {train_dataset.augmented_repeat}")
+    print(f"Final train samples: {len(train_dataset)}")
+    print(f"Extra augmentation enabled items: {enabled_extra if enabled_extra else []}")
     print(f"Validation dataset length: {len(val_dataset)}")
-    if train_dataset.expansion_enabled:
-        expected_length = train_dataset.base_length * (
-            train_dataset.dataset_expansion["original_repeat"] + train_dataset.dataset_expansion["augmented_repeat"]
-        )
-        print(
-            "Dataset expansion enabled: "
-            f"train dataset length {len(train_dataset)} = original {train_dataset.base_length} x "
-            f"{train_dataset.dataset_expansion['original_repeat']} original + "
-            f"{train_dataset.dataset_expansion['augmented_repeat']} augmented repeats "
-            f"(expected: {expected_length})"
-        )
     common = {
         "batch_size": int(cfg["batch_size"]),
         "num_workers": int(cfg.get("num_workers", 4)),
