@@ -1,0 +1,72 @@
+# VOC2012 PBL split dataset config for official MMSegmentation/SegNeXt flows.
+# Assumes commands are launched from SegNeXt-main and PBL files live in the
+# parent PBL4 directory.
+
+import os
+
+segnext_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+pbl_root = os.path.abspath(os.path.join(segnext_root, '..'))
+
+dataset_type = 'PascalVOCDataset'
+data_root = os.path.join(pbl_root, 'VOCdevkit', 'VOC2012')
+train_split = os.path.join(pbl_root, 'pbl_train.txt')
+val_split = os.path.join(pbl_root, 'pbl_val.txt')
+ignore_index = 255
+crop_size = (512, 512)
+img_norm_cfg = dict(
+    mean=[123.675, 116.28, 103.53],
+    std=[58.395, 57.12, 57.375],
+    to_rgb=True)
+
+train_pipeline = [
+    dict(type='LoadImageFromFile'),
+    dict(type='LoadAnnotations'),
+    dict(type='Resize', img_scale=(2048, 512), ratio_range=(0.5, 2.0)),
+    dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
+    dict(type='RandomFlip', prob=0.5),
+    dict(type='PhotoMetricDistortion'),
+    dict(type='Normalize', **img_norm_cfg),
+    dict(type='Pad', size=crop_size, pad_val=0, seg_pad_val=ignore_index),
+    dict(type='DefaultFormatBundle'),
+    dict(type='Collect', keys=['img', 'gt_semantic_seg']),
+]
+
+test_pipeline = [
+    dict(type='LoadImageFromFile'),
+    dict(
+        type='MultiScaleFlipAug',
+        img_scale=(2048, 512),
+        flip=False,
+        transforms=[
+            dict(type='Resize', keep_ratio=True),
+            dict(type='RandomFlip'),
+            dict(type='Normalize', **img_norm_cfg),
+            dict(type='ImageToTensor', keys=['img']),
+            dict(type='Collect', keys=['img']),
+        ])
+]
+
+data = dict(
+    samples_per_gpu=4,
+    workers_per_gpu=4,
+    train=dict(
+        type=dataset_type,
+        data_root=data_root,
+        img_dir='JPEGImages',
+        ann_dir='SegmentationClass',
+        split=train_split,
+        pipeline=train_pipeline),
+    val=dict(
+        type=dataset_type,
+        data_root=data_root,
+        img_dir='JPEGImages',
+        ann_dir='SegmentationClass',
+        split=val_split,
+        pipeline=test_pipeline),
+    test=dict(
+        type=dataset_type,
+        data_root=data_root,
+        img_dir='JPEGImages',
+        ann_dir='SegmentationClass',
+        split=val_split,
+        pipeline=test_pipeline))
