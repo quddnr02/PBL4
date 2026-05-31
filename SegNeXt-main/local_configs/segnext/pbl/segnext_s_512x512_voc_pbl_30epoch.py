@@ -2,19 +2,12 @@
 # Run from SegNeXt-main with tools/train.py so that the official mmseg registry
 # loads mmseg/models/backbones/mscan.py and mmseg/models/decode_heads/ham_head.py.
 
-import os
-
-config_dir = os.path.dirname(__file__)
-segnext_root = os.path.abspath(os.path.join(config_dir, '..', '..', '..'))
-pbl_root = os.path.abspath(os.path.join(segnext_root, '..'))
-
 experiment_name = 'SegNeXt_S_CE_Official'
-work_dir = os.path.join(pbl_root, 'runs', experiment_name)
+work_dir = '../runs/SegNeXt_S_CE_Official'
 
-data_root = os.path.join(pbl_root, 'VOCdevkit', 'VOC2012')
-train_split = os.path.join(pbl_root, 'pbl_train.txt')
-val_split = os.path.join(pbl_root, 'pbl_val.txt')
-pretrained_checkpoint = os.path.join(segnext_root, 'pretrained', 'mscan_s.pth')
+data_root = '../VOCdevkit/VOC2012'
+train_split = '../pbl_train.txt'
+val_split = '../pbl_val.txt'
 
 num_classes = 21
 ignore_index = 255
@@ -28,23 +21,15 @@ warmup_epochs = 3
 
 
 def _count_split(path):
-    if not os.path.exists(path):
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return sum(1 for line in f if line.strip())
+    except FileNotFoundError:
         return None
-    with open(path, 'r', encoding='utf-8') as f:
-        return sum(1 for line in f if line.strip())
 
 
 train_count = _count_split(train_split)
 val_count = _count_split(val_split)
-
-if not os.path.exists(pretrained_checkpoint):
-    raise FileNotFoundError(
-        'Required ImageNet-pretrained MSCAN-S checkpoint was not found.\n'
-        f'Expected: {pretrained_checkpoint}\n'
-        'Put the official checkpoint at SegNeXt-main/pretrained/mscan_s.pth, '
-        'or run: python tools/download_mscan.py --variant s\n'
-        'Do not continue with random initialization for the CE baseline.'
-    )
 
 if train_count is None:
     print(f'[PBL config warning] train split not found yet: {train_split}')
@@ -52,10 +37,8 @@ if val_count is None:
     print(f'[PBL config warning] val split not found yet: {val_split}')
 
 print('\n[PBL SegNeXt official experiment]')
-print(f'  config path              = {__file__}')
 print(f'  work_dir                 = {work_dir}')
 print('  model                    = official SegNeXt-S (MSCAN-S + LightHamHead)')
-print(f'  pretrained checkpoint    = {pretrained_checkpoint}')
 print(f'  train split              = {train_split}')
 print(f'  val split                = {val_split}')
 print(f'  train images count       = {train_count if train_count is not None else "unknown"}')
@@ -71,10 +54,9 @@ ham_norm_cfg = dict(type='GN', num_groups=32, requires_grad=True)
 
 model = dict(
     type='EncoderDecoder',
-    pretrained=None,
     backbone=dict(
         type='MSCAN',
-        init_cfg=dict(type='Pretrained', checkpoint=pretrained_checkpoint),
+        init_cfg=dict(type='Pretrained', checkpoint='pretrained/mscan_s.pth'),
         embed_dims=[64, 128, 320, 512],
         mlp_ratios=[8, 8, 4, 4],
         drop_rate=0.0,
