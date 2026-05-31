@@ -44,6 +44,14 @@ class VOCSegmentationDataset(Dataset):
     def expansion_enabled(self) -> bool:
         return self.train and self.dataset_expansion["enabled"]
 
+    @property
+    def original_repeat(self) -> int:
+        return int(self.dataset_expansion["original_repeat"]) if self.expansion_enabled else 0
+
+    @property
+    def augmented_repeat(self) -> int:
+        return int(self.dataset_expansion["augmented_repeat"]) if self.expansion_enabled else 1
+
     def __len__(self) -> int:
         if not self.expansion_enabled:
             return self.base_length
@@ -51,14 +59,18 @@ class VOCSegmentationDataset(Dataset):
         return self.base_length * repeat_count
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        image_id, is_augmented = self._index_to_variant(idx)
+        image_id, variant = self._index_to_variant(idx)
         image = Image.open(self.image_dir / f"{image_id}.jpg").convert("RGB")
         mask = Image.open(self.mask_dir / f"{image_id}.png")
-        image, mask = self._transform(image, mask, is_augmented=is_augmented)
+        image, mask = self._transform(image, mask, variant=variant)
         return image, mask.long()
 
     def mask_paths(self) -> list[Path]:
         return [self.mask_dir / f"{image_id}.png" for image_id in self.ids]
+
+    def extra_augmentation_enabled_items(self) -> list[str]:
+        aug_cfg = (self.aug_config or {}).get("extra_augmentation", {})
+        return [name for name, cfg in aug_cfg.items() if isinstance(cfg, dict) and bool(cfg.get("enabled", False))]
 
     def _build_dataset_expansion(self) -> dict[str, int | bool]:
         expansion_cfg = (self.aug_config or {}).get("dataset_expansion", {})
@@ -68,15 +80,17 @@ class VOCSegmentationDataset(Dataset):
             "augmented_repeat": max(0, int(expansion_cfg.get("augmented_repeat", 0))),
         }
 
-    def _index_to_variant(self, idx: int) -> tuple[str, bool]:
+    def _index_to_variant(self, idx: int) -> tuple[str, str]:
         if not self.expansion_enabled:
-            return self.ids[idx], False
+            variant = "augmented" if self.train else "eval"
+            return self.ids[idx], variant
+
         base_len = self.base_length
         original_total = base_len * self.dataset_expansion["original_repeat"]
         if idx < original_total:
-            return self.ids[idx % base_len], False
+            return self.ids[idx % base_len], "original"
         augmented_idx = idx - original_total
-        return self.ids[augmented_idx % base_len], True
+        return self.ids[augmented_idx % base_len], "augmented"
 
     def _extra_augmentation(self, image: Image.Image, mask: Image.Image) -> tuple[Image.Image, Image.Image]:
         aug_cfg = (self.aug_config or {}).get("extra_augmentation", {})
@@ -139,19 +153,28 @@ class VOCSegmentationDataset(Dataset):
         )
         return image, mask
 
-    def _transform(
-        self, image: Image.Image, mask: Image.Image, is_augmented: bool = False
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        if self.train:
-            image, mask = self._train_transform(image, mask)
-            if is_augmented:
-                image, mask = self._extra_augmentation(image, mask)
+    def _transform(self, image: Image.Image, mask: Image.Image, variant: str) -> tuple[torch.Tensor, torch.Tensor]:
+        if not self.train:
+            image, mask = self._eval_transform(image, mask)
+        elif variant == "original":
+            image, mask = self._original_transform(image, mask)
         else:
-            image = TF.resize(image, [self.image_size, self.image_size], interpolation=TF.InterpolationMode.BILINEAR)
-            mask = TF.resize(mask, [self.image_size, self.image_size], interpolation=TF.InterpolationMode.NEAREST)
+            image, mask = self._train_transform(image, mask)
+            image, mask = self._extra_augmentation(image, mask)
         image_tensor = TF.normalize(TF.to_tensor(image), IMAGENET_MEAN, IMAGENET_STD)
         mask_tensor = torch.as_tensor(np.array(mask), dtype=torch.long)
         return image_tensor, mask_tensor
+
+    def _original_transform(self, image: Image.Image, mask: Image.Image) -> tuple[Image.Image, Image.Image]:
+        return self._resize_to_image_size(image, mask)
+
+    def _eval_transform(self, image: Image.Image, mask: Image.Image) -> tuple[Image.Image, Image.Image]:
+        return self._resize_to_image_size(image, mask)
+
+    def _resize_to_image_size(self, image: Image.Image, mask: Image.Image) -> tuple[Image.Image, Image.Image]:
+        image = TF.resize(image, [self.image_size, self.image_size], interpolation=TF.InterpolationMode.BILINEAR)
+        mask = TF.resize(mask, [self.image_size, self.image_size], interpolation=TF.InterpolationMode.NEAREST)
+        return image, mask
 
     def _train_transform(self, image: Image.Image, mask: Image.Image) -> tuple[Image.Image, Image.Image]:
         image, mask = self._random_scale(image, mask)
