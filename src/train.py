@@ -42,9 +42,26 @@ HISTORY_FIELDS = [
 ]
 
 
-def make_loaders(cfg: dict) -> tuple[VOCSegmentationDataset, VOCSegmentationDataset, DataLoader, DataLoader]:
-    train_dataset = VOCSegmentationDataset(cfg["voc_root"], cfg["train_txt"], cfg["image_size"], train=True)
+def make_loaders(
+    cfg: dict, aug_config: str | None = None
+) -> tuple[VOCSegmentationDataset, VOCSegmentationDataset, DataLoader, DataLoader]:
+    train_dataset = VOCSegmentationDataset(
+        cfg["voc_root"], cfg["train_txt"], cfg["image_size"], train=True, aug_config=aug_config
+    )
     val_dataset = VOCSegmentationDataset(cfg["voc_root"], cfg["val_txt"], cfg["image_size"], train=False)
+    print(f"Train dataset length: {len(train_dataset)} (original: {train_dataset.base_length})")
+    print(f"Validation dataset length: {len(val_dataset)}")
+    if train_dataset.expansion_enabled:
+        expected_length = train_dataset.base_length * (
+            train_dataset.dataset_expansion["original_repeat"] + train_dataset.dataset_expansion["augmented_repeat"]
+        )
+        print(
+            "Dataset expansion enabled: "
+            f"train dataset length {len(train_dataset)} = original {train_dataset.base_length} x "
+            f"{train_dataset.dataset_expansion['original_repeat']} original + "
+            f"{train_dataset.dataset_expansion['augmented_repeat']} augmented repeats "
+            f"(expected: {expected_length})"
+        )
     common = {
         "batch_size": int(cfg["batch_size"]),
         "num_workers": int(cfg.get("num_workers", 4)),
@@ -131,7 +148,7 @@ def save_checkpoint(path: Path, model, optimizer, epoch: int, row: dict, cfg: di
     )
 
 
-def run_experiment(config_path: str) -> None:
+def run_experiment(config_path: str, aug_config: str | None = None) -> None:
     cfg = load_config(config_path)
     set_seed(cfg.get("seed", 42), deterministic=bool(cfg.get("deterministic", True)))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -141,9 +158,11 @@ def run_experiment(config_path: str) -> None:
     output_dir = ensure_dir(Path(cfg.get("output_dir", "runs")) / experiment_name)
     print(f"\n===== {experiment_name} =====")
     print(f"Config: {config_path}")
+    if aug_config:
+        print(f"Augmentation config: {aug_config}")
     print(f"Device: {device}")
 
-    train_dataset, _, train_loader, val_loader = make_loaders(cfg)
+    train_dataset, _, train_loader, val_loader = make_loaders(cfg, aug_config=aug_config)
     model = SegFormerMultiHead(
         num_classes=VOC_NUM_CLASSES,
         use_boundary_head=bool(cfg.get("use_boundary_head", False)),
@@ -211,9 +230,10 @@ def run_experiment(config_path: str) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Config-driven SegFormer-B1 VOC2012 semantic segmentation trainer")
     parser.add_argument("--config", required=True, help="Path to YAML experiment config")
+    parser.add_argument("--aug-config", default=None, help="Path to optional YAML extra augmentation config")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    run_experiment(args.config)
+    run_experiment(args.config, aug_config=args.aug_config)
