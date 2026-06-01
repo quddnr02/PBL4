@@ -6,6 +6,26 @@ import torch.nn.functional as F
 from transformers import SegformerConfig, SegformerModel
 
 
+SEGFORMER_FALLBACK_CONFIGS = {
+    "mit-b0": dict(hidden_sizes=[32, 64, 160, 256], depths=[2, 2, 2, 2], num_attention_heads=[1, 2, 5, 8]),
+    "mit-b1": dict(hidden_sizes=[64, 128, 320, 512], depths=[2, 2, 2, 2], num_attention_heads=[1, 2, 5, 8]),
+    "mit-b2": dict(hidden_sizes=[64, 128, 320, 512], depths=[3, 4, 6, 3], num_attention_heads=[1, 2, 5, 8]),
+    "mit-b3": dict(hidden_sizes=[64, 128, 320, 512], depths=[3, 4, 18, 3], num_attention_heads=[1, 2, 5, 8]),
+    "mit-b4": dict(hidden_sizes=[64, 128, 320, 512], depths=[3, 8, 27, 3], num_attention_heads=[1, 2, 5, 8]),
+    "mit-b5": dict(hidden_sizes=[64, 128, 320, 512], depths=[3, 6, 40, 3], num_attention_heads=[1, 2, 5, 8]),
+}
+
+
+def _fallback_config_for_model(pretrained_model_name: str) -> SegformerConfig:
+    model_key = next((key for key in SEGFORMER_FALLBACK_CONFIGS if key in pretrained_model_name.lower()), "mit-b1")
+    return SegformerConfig(
+        output_hidden_states=True,
+        sr_ratios=[8, 4, 2, 1],
+        decoder_hidden_size=256,
+        **SEGFORMER_FALLBACK_CONFIGS[model_key],
+    )
+
+
 class ConvBNReLU(nn.Sequential):
     def __init__(self, in_channels: int, out_channels: int, kernel_size: int = 3, dilation: int = 1):
         padding = dilation * (kernel_size // 2)
@@ -45,24 +65,28 @@ class SegFormerMultiHead(nn.Module):
         use_context_head: bool = False,
         decoder_channels: int = 256,
         pretrained_model_name: str = "nvidia/mit-b1",
+        id2label: dict[int, str] | None = None,
+        label2id: dict[str, int] | None = None,
     ):
         super().__init__()
         self.num_classes = num_classes
         self.use_boundary_head = use_boundary_head
         self.use_context_head = use_context_head
+        self.id2label = id2label or {idx: f"class_{idx}" for idx in range(num_classes)}
+        self.label2id = label2id or {label: idx for idx, label in self.id2label.items()}
         try:
-            self.encoder = SegformerModel.from_pretrained(pretrained_model_name, output_hidden_states=True)
-        except Exception as exc:
-            print(f"[WARN] Could not load pretrained '{pretrained_model_name}' ({exc}); using random SegFormer-B1 config.")
-            config = SegformerConfig(
-                output_hidden_states=True,
-                hidden_sizes=[64, 128, 320, 512],
-                depths=[2, 2, 2, 2],
-                num_attention_heads=[1, 2, 5, 8],
-                sr_ratios=[8, 4, 2, 1],
-                decoder_hidden_size=256,
+            self.encoder = SegformerModel.from_pretrained(
+                pretrained_model_name, output_hidden_states=True, ignore_mismatched_sizes=True
             )
-            self.encoder = SegformerModel(config)
+        except Exception as exc:
+            print(
+                f"[WARN] Could not load pretrained '{pretrained_model_name}' ({exc}); "
+                "using a randomly initialized SegFormer config that matches the requested MiT scale."
+            )
+            self.encoder = SegformerModel(_fallback_config_for_model(pretrained_model_name))
+        self.encoder.config.num_labels = num_classes
+        self.encoder.config.id2label = self.id2label
+        self.encoder.config.label2id = self.label2id
         hidden_sizes = list(self.encoder.config.hidden_sizes)
         self.projections = nn.ModuleList([nn.Conv2d(ch, decoder_channels, 1) for ch in hidden_sizes])
         self.fuse = nn.Sequential(

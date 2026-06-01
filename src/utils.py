@@ -10,8 +10,40 @@ import yaml
 
 VOC_NUM_CLASSES = 21
 VOC_IGNORE_INDEX = 255
+VOC_CLASS_NAMES = (
+    "background",
+    "aeroplane",
+    "bicycle",
+    "bird",
+    "boat",
+    "bottle",
+    "bus",
+    "car",
+    "cat",
+    "chair",
+    "cow",
+    "diningtable",
+    "dog",
+    "horse",
+    "motorbike",
+    "person",
+    "pottedplant",
+    "sheep",
+    "sofa",
+    "train",
+    "tvmonitor",
+)
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
+
+
+def voc_label_mappings(num_classes: int = VOC_NUM_CLASSES) -> tuple[dict[int, str], dict[str, int]]:
+    if num_classes == len(VOC_CLASS_NAMES):
+        id2label = {idx: name for idx, name in enumerate(VOC_CLASS_NAMES)}
+    else:
+        id2label = {idx: f"class_{idx}" for idx in range(num_classes)}
+    label2id = {name: idx for idx, name in id2label.items()}
+    return id2label, label2id
 
 
 def load_config(path: str | os.PathLike) -> Dict[str, Any]:
