@@ -25,6 +25,7 @@ from utils import (
     load_config,
     peak_memory_mb,
     set_seed,
+    voc_label_mappings,
 )
 
 HISTORY_FIELDS = [
@@ -66,7 +67,9 @@ def make_loaders(
     return train_dataset, val_dataset, train_loader, val_loader
 
 
-def build_loss(cfg: dict, train_dataset: VOCSegmentationDataset, device: torch.device) -> MultiHeadSegmentationLoss:
+def build_loss(
+    cfg: dict, train_dataset: VOCSegmentationDataset, device: torch.device, ignore_index: int
+) -> MultiHeadSegmentationLoss:
     class_weights = None
     if bool(cfg.get("use_class_weight", True)):
         class_weights = compute_class_weights(train_dataset.mask_paths(), method=cfg.get("class_weight_method", "median_frequency"))
@@ -74,7 +77,7 @@ def build_loss(cfg: dict, train_dataset: VOCSegmentationDataset, device: torch.d
         class_weights = class_weights.to(device)
     return MultiHeadSegmentationLoss(
         class_weights=class_weights,
-        ignore_index=VOC_IGNORE_INDEX,
+        ignore_index=ignore_index,
         boundary_weight=float(cfg.get("boundary_loss_weight", 0.2)),
         context_weight=float(cfg.get("context_loss_weight", 0.4)),
     )
@@ -105,10 +108,12 @@ def train_one_epoch(model, loader, criterion, optimizer, scaler, device, epoch: 
 
 
 @torch.no_grad()
-def validate(model, loader, criterion, device, epoch: int) -> tuple[float, dict[str, float], SegmentationMetrics, float]:
+def validate(
+    model, loader, criterion, device, epoch: int, num_classes: int, ignore_index: int
+) -> tuple[float, dict[str, float], SegmentationMetrics, float]:
     model.eval()
     total_loss = 0.0
-    metrics = SegmentationMetrics(VOC_NUM_CLASSES, VOC_IGNORE_INDEX)
+    metrics = SegmentationMetrics(num_classes, ignore_index)
     start = time.perf_counter()
     progress = tqdm(loader, desc=f"val epoch {epoch}", leave=False)
     for images, masks in progress:
@@ -156,13 +161,23 @@ def run_experiment(config_path: str, aug_config: str | None = None) -> None:
         print(f"Augmentation config: {aug_config}")
     print(f"Device: {device}")
 
+    num_classes = int(cfg.get("num_classes", VOC_NUM_CLASSES))
+    ignore_index = int(cfg.get("ignore_index", VOC_IGNORE_INDEX))
+    pretrained_model_name = cfg.get("pretrained_model_name", "nvidia/mit-b1")
+    id2label, label2id = voc_label_mappings(num_classes)
+    print(f"Pretrained backbone: {pretrained_model_name}")
+    print(f"Num classes: {num_classes}")
+    print(f"Ignore index: {ignore_index}")
+
     train_dataset, _, train_loader, val_loader = make_loaders(cfg, aug_config=aug_config)
     model = SegFormerMultiHead(
-        num_classes=VOC_NUM_CLASSES,
+        num_classes=num_classes,
         use_boundary_head=bool(cfg.get("use_boundary_head", False)),
         use_context_head=bool(cfg.get("use_context_head", False)),
         decoder_channels=int(cfg.get("decoder_channels", 256)),
-        pretrained_model_name=cfg.get("pretrained_model_name", "nvidia/mit-b1"),
+        pretrained_model_name=pretrained_model_name,
+        id2label=id2label,
+        label2id=label2id,
     ).to(device)
     params_m = count_parameters_m(model)
     gflops = compute_gflops(model, int(cfg["image_size"]), device)
@@ -170,7 +185,9 @@ def run_experiment(config_path: str, aug_config: str | None = None) -> None:
     print(f"GFLOPs: {gflops:.3f}")
     print(f"Model size(MB, estimated state_dict / best.pt function): {estimate_state_dict_size_mb(model):.3f} / {checkpoint_size_mb(output_dir / 'best.pt'):.3f}")
 
-    criterion = build_loss(cfg, train_dataset, device)
+    print(f"Semantic head output channels: {model.semantic_head[-1].out_channels}")
+    criterion = build_loss(cfg, train_dataset, device, ignore_index)
+    print(f"Loss ignore_index: {criterion.ignore_index}")
     optimizer = torch.optim.AdamW(model.parameters(), lr=float(cfg["lr"]), weight_decay=float(cfg.get("weight_decay", 0.01)))
     scaler = GradScaler(enabled=device.type == "cuda") if device.type == "cuda" else None
 
@@ -181,7 +198,9 @@ def run_experiment(config_path: str, aug_config: str | None = None) -> None:
     epochs = int(cfg["epochs"])
     for epoch in range(1, epochs + 1):
         train_loss, train_time = train_one_epoch(model, train_loader, criterion, optimizer, scaler, device, epoch)
-        val_loss, metric_values, val_metrics, val_time = validate(model, val_loader, criterion, device, epoch)
+        val_loss, metric_values, val_metrics, val_time = validate(
+            model, val_loader, criterion, device, epoch, num_classes, ignore_index
+        )
         row = {
             "epoch": epoch,
             "train_loss": train_loss,
